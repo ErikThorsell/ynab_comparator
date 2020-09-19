@@ -2,9 +2,9 @@ YNAB Comparator
 ===============
 
 The YNAB Comparator Script can be used to find errors in your "YNABing".
-If the balance in your bank account does not match the balance in YNAB, this
-script offers a fast way to do a first rough search for the culprit
-transactions.
+This script offers a fast way to do a first rough search for the culprit
+transactions, in the case where the balance in your bank account does not
+match the balance in YNAB, 
 
 The script compares each transaction in your YNAB export to each transaction in
 your bank export.
@@ -25,6 +25,9 @@ exports from:
 # USAGE
 
 ## YNAB
+If you provide a YNAB API Token in `$repo/data/token.api`, the script will attempt to pull the data straight from YNAB.
+
+If you do not provide a YNAB API Token, you need to export the YNAB data yourself.
 1) The YNAB export is a zip archive. You only need the Register-tsv.
 2) Save it as `$repo/data/ynab.tsv`
 
@@ -36,7 +39,7 @@ exports from:
 1) Save the ICA export as `$repo/data/ica.csv`
 
 ## Run Script
-Edit the `filter_date` in the script (`src/main.py`). The `filter_date` denotes
-the oldest transactions that should be compared.
+`python ynab_comp/ynab_comp.py --budget-name $YNAB-budget-name --filter-date "YYYY-MM-DD"`
 
-`python src/main.py`
+* `--budget-name` is the name of the budget, in YNAB
+* `--filter-date` is the earliest date from where transactions should be compared
