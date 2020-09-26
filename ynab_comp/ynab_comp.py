@@ -1,4 +1,5 @@
 import argparse
+import sys
 
 from loguru import logger
 
@@ -32,7 +33,7 @@ def main(args):
         logger.warning(
             "Unable to find API Token in data/token.api. "
             "Continuing under the assumption that you have up to date "
-            "YNAB data available."
+            "YNAB data available in data/ynab.tsv."
         )
         ynab_tsv = "data/ynab.tsv"
 
@@ -54,9 +55,24 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--budget-name",
-        required=False,
+        required=True,
         help="Name of YNAB Budget to use, if querying the YNAB API.",
+    )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        required=False,
+        action="store_true",
+        help="",
     )
 
     args = parser.parse_args()
+
+    if args.verbose:
+        logger.remove()
+        logger.add(sys.stderr, level="DEBUG")
+    else:
+        logger.remove()
+        logger.add(sys.stderr, level="INFO")
+
     main(args)

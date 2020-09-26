@@ -16,11 +16,14 @@ def extract_ynab_df(ynab_tsv: str, account: str, filter_date: str) -> pd.DataFra
         filter_date: Earliest date to take into consideration when parsing
     """
     ynab_df = pd.read_csv(ynab_tsv, sep="\t", index_col=False)
-    logger.debug(f"Sample of raw YNAB data for account {account}:\n{ynab_df.head(5)}")
 
     filtered_ynab_df = ynab_df.loc[
         (ynab_df["Date"] >= filter_date) & (ynab_df["Account"] == account)
     ]
+
+    logger.debug(
+        f"Sample of YNAB data for account {account}:\n{filtered_ynab_df.head(5)}"
+    )
 
     data_of_interest_df = filtered_ynab_df[["Date", "Payee", "Outflow", "Inflow"]]
     data_of_interest_df.columns = ["Date", "Description", "Outflow", "Inflow"]
@@ -168,7 +171,7 @@ def compare_ynab_to_bank(
     extraction_function: Callable[[str, str], pd.DataFrame],
     filter_date: str,
 ) -> None:
-    """Compare a YNAB .tsv file and compare it to a bank's transaction excerpt.
+    """Compare a YNAB .tsv file to a bank's transaction excerpt.
 
     Args:
         ynab_tsv: Path to YNAB .tsv file
@@ -184,7 +187,7 @@ def compare_ynab_to_bank(
     ynab = extract_ynab_df(ynab_tsv, ynab_account, filter_date)
     bank = extraction_function(bank_file, filter_date)
 
-    in_bank_not_ynab = compare_frames(ynab, bank, printing=False)
+    in_bank_not_ynab = compare_frames(bank, ynab, printing=False)
 
     if not in_bank_not_ynab.empty:
         logger.warning(
@@ -196,7 +199,7 @@ def compare_ynab_to_bank(
             f"There are no transactions in {bank_name} that are not also in YNAB."
         )
 
-    in_ynab_not_bank = compare_frames(bank, ynab, printing=False)
+    in_ynab_not_bank = compare_frames(ynab, bank, printing=False)
 
     if not in_ynab_not_bank.empty:
         logger.warning(
