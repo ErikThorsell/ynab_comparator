@@ -35,7 +35,13 @@ def extract_ynab_df(ynab_tsv: str, account: str, filter_date: str) -> pd.DataFra
     for idx, row in data_of_interest_df.iterrows():
         inflow = row["Inflow"].rstrip("kr").replace(",", ".")
         outflow = row["Outflow"].rstrip("kr").replace(",", ".")
-        amount = float(inflow) - float(outflow)
+        try:  # you'll end up in the except if you have an empty row in YNAB
+            amount = float(inflow) - float(outflow)
+        except ValueError as e:
+            logger.error(f"Unable to parse inflow/outflow: {inflow}/{outflow}.")
+            logger.error(f"Error: {e}")
+            raise
+
         parsed_df.loc[idx] = [row["Date"], row["Description"].lower(), amount]
 
     logger.info(
