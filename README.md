@@ -33,7 +33,6 @@ If you do not provide a YNAB API Token, you need to export the YNAB data yoursel
 
 ## SWEDBANK
 1) Save the Swedbank export as `$repo/data/swedbank.csv`
-2) Remove the first row of the exported csv.
 
 ## ICA
 1) Save the ICA export as `$repo/data/ica.csv`

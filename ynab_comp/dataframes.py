@@ -57,14 +57,40 @@ def extract_swedbank_df(swedbank_csv: str, filter_date: str) -> pd.DataFrame:
 
     Extracts the [Date, Description, Amount] from the .csv.
 
+    ~ Known issue with CSV File ~
+    The Swedbank "csv" isn't a very good CSV.
+
+        1. It has an extra line at the top of the file which is not part of
+        the actual data.
+        2. The file is encoded using cp1252 (Windows 1252 encoding).
+
+    If you just download the file and run the script, the script attempts to
+    open the file, remove the first line, and re-encode the file as UTF-8.
+    However, if you remove the first line yourself but save the file as
+    cp1252, Pandas must open the file with unicode_espace. (Hence the try/except.)
+
+    I hope this makes the parsing more robust.
+
     Args:
         swedbank_csv: Path to the .csv file
         filter_date: Earliest date to take into consideration when parsing
     """
-    # Stupid Swedbank does not follow CSV Standards
-    # Remember to remove the first line from the file!
 
-    swedbank_df = pd.read_csv(swedbank_csv, encoding="unicode_escape")
+    # Encoding fixing and data stripping (explained in docstring)
+    with open(swedbank_csv, encoding="cp1252") as sb_csv:
+        data = sb_csv.readlines()
+
+    if "* Transaktioner" in data[0]:
+        data = "".join(data[1:])
+        with open(swedbank_csv, "w", encoding="utf-8") as sb_csv:
+            sb_csv.write(data)
+
+    try:
+        swedbank_df = pd.read_csv(swedbank_csv)
+    except KeyError:
+        swedbank_df = pd.read_csv(swedbank_csv, encoding="unicode_escape")
+    # End of Encoding and data stripping
+
     saldo = float(swedbank_df["Bokfört saldo"].iloc[0])
     logger.info(f"Swedbank Saldo: {saldo} SEK")
 
