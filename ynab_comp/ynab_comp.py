@@ -22,7 +22,7 @@ def main(args):
     # (YNAB Account Name, Path to data file, Name of bank, Function that parses data file into a DataFrame)
     LIST_OF_BANKS = [
         ("Checking", "data/swedbank.csv", "Swedbank", extract_swedbank_df),
-        ("ICA Banken", "data/ica.csv", "ICA Banken", extract_ica_df),
+#        ("ICA Banken", "data/ica.csv", "ICA Banken", extract_ica_df),
     ]
 
     # Query YNAB API for data

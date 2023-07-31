@@ -1,7 +1,10 @@
 """Module for everything related to Pandas DataFrames."""
+from datetime import datetime
 from typing import Callable
 from loguru import logger
+
 import pandas as pd
+from thefuzz import fuzz
 
 
 def extract_ynab_df(ynab_tsv: str, account: str, filter_date: str) -> pd.DataFrame:
@@ -25,12 +28,12 @@ def extract_ynab_df(ynab_tsv: str, account: str, filter_date: str) -> pd.DataFra
         f"Sample of YNAB data for account {account}:\n{filtered_ynab_df.head(5)}"
     )
 
-    data_of_interest_df = filtered_ynab_df[["Date", "Payee", "Outflow", "Inflow"]]
-    data_of_interest_df.columns = ["Date", "Description", "Outflow", "Inflow"]
+    data_of_interest_df = filtered_ynab_df[["Date", "Payee", "Outflow", "Inflow", "Memo"]]
+    data_of_interest_df.columns = ["Date", "Description", "Outflow", "Inflow", "Memo"]
     logger.debug(f"Parsed YNAB data:\n{data_of_interest_df.head(5)}")
 
-    # It is important that every DataFrame have the same Column names (Date, Description, Amount)
-    parsed_df = pd.DataFrame(columns=["Date", "Description", "Amount"])
+    # It is important that every DataFrame have the same Column names (Date, Description, Amount, Memo)
+    parsed_df = pd.DataFrame(columns=["Date", "Description", "Amount", "Memo"])
 
     for idx, row in data_of_interest_df.iterrows():
         inflow = row["Inflow"].rstrip("kr").replace(",", ".")
@@ -42,7 +45,7 @@ def extract_ynab_df(ynab_tsv: str, account: str, filter_date: str) -> pd.DataFra
             logger.error(f"Error: {e}")
             raise
 
-        parsed_df.loc[idx] = [row["Date"], row["Description"].lower(), amount]
+        parsed_df.loc[idx] = [row["Date"], row["Description"].lower(), amount, row["Memo"]]
 
     logger.info(
         f"Extracted {len(parsed_df.index)} entries from YNAB, for account {account}."
@@ -171,20 +174,60 @@ def compare_frames(
     not_found = pd.DataFrame(columns=["Date", "Description", "Amount"])
 
     for idx_1, transaction_1 in frame_1.iterrows():
+
+        logger.debug(f"Verifying transaction: {transaction_1['Description']} from {transaction_1['Date']} @ {transaction_1['Amount']}")
+
         found = False
         amount_1 = transaction_1["Amount"]
 
-        for idx_2, transaction_2 in frame_2.iterrows():
-            if transaction_2["Amount"] == amount_1:
-                logger.debug(
-                    f"Found Transaction: {amount_1} | {transaction_1['Description']} | {transaction_2['Description']}"
-                )
+        # Reversed, because for some reason the iteration went backwards
+        matching_amount = frame_2.loc[frame_2["Amount"] == amount_1][::-1]
+        logger.debug(f" > Found {len(matching_amount)} rows with amount {amount_1}")
+
+        for idx_2, transaction_2 in matching_amount.iterrows():
+            logger.debug(
+                f" > {transaction_1['Description']} and {transaction_2['Description']} have the same amount: {amount_1}"
+            )
+
+            if len(matching_amount) == 1:
+                logger.debug(f" >> Considering uniqueness to be enough. Dropping!")
                 frame_2.drop(idx_2, inplace=True)
                 found = True
                 break
 
+            t1 = datetime.strptime(transaction_1["Date"], "%Y-%m-%d")
+            t2 = datetime.strptime(transaction_2["Date"], "%Y-%m-%d")
+            t_diff = t1 - t2
+            logger.debug(f" > The difference in time between the two transactions is: {t_diff.days}")
+
+            if abs(t_diff.days) > 7:
+                logger.debug(f" >> Considering the transactions to be too distant. Moving on.")
+                continue
+
+            # Compare with Description
+            f_ratio = fuzz.partial_ratio(transaction_1['Description'], transaction_2['Description'])
+            logger.debug(f" > {transaction_1['Description']} and {transaction_2['Description']} have Fuzz Ratio: {f_ratio}")
+
+            if f_ratio > 65:
+                logger.debug(f" >> Considering the transactions to be similar enough. Dropping!")
+                frame_2.drop(idx_2, inplace=True)
+                found = True
+                break
+
+            # Compare with 'memo' field in YNAB
+            if "Memo" in transaction_2 and not pd.isna(transaction_2["Memo"]):
+              logger.debug(f" > Unable to find match in Description, trying Memo: {transaction_2['Memo']}")
+              f_ratio = fuzz.partial_ratio(transaction_1['Description'], transaction_2['Memo'])
+              logger.debug(f" > {transaction_1['Description']} and {transaction_2['Memo']} have Fuzz Ratio: {f_ratio}")
+
+              if f_ratio > 65:
+                  logger.debug(f" >> Considering the transactions to be similar enough. Dropping!")
+                  frame_2.drop(idx_2, inplace=True)
+                  found = True
+                  break
+
         if not found:
-            logger.debug(f"Did not find: {amount_1} | {transaction_1['Description']}")
+            logger.warning(f" > Did not find: {amount_1} | {transaction_1['Description']} @ {transaction_1['Date']}")
             missing_row = {
                 "Date": transaction_1["Date"],
                 "Description": transaction_1["Description"],
