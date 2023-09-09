@@ -2,6 +2,7 @@
 from datetime import datetime
 from typing import Callable
 from loguru import logger
+import sys
 
 import pandas as pd
 from thefuzz import fuzz
@@ -20,13 +21,9 @@ def extract_ynab_df(ynab_tsv: str, account: str, filter_date: str) -> pd.DataFra
     """
     ynab_df = pd.read_csv(ynab_tsv, sep="\t", index_col=False)
 
-    filtered_ynab_df = ynab_df.loc[
-        (ynab_df["Date"] >= filter_date) & (ynab_df["Account"] == account)
-    ]
+    filtered_ynab_df = ynab_df.loc[(ynab_df["Date"] >= filter_date) & (ynab_df["Account"] == account)]
 
-    logger.debug(
-        f"Sample of YNAB data for account {account}:\n{filtered_ynab_df.head(5)}"
-    )
+    logger.debug(f"Sample of YNAB data for account {account}:\n{filtered_ynab_df.head(5)}")
 
     data_of_interest_df = filtered_ynab_df[["Date", "Payee", "Outflow", "Inflow", "Memo"]]
     data_of_interest_df.columns = ["Date", "Description", "Outflow", "Inflow", "Memo"]
@@ -47,9 +44,7 @@ def extract_ynab_df(ynab_tsv: str, account: str, filter_date: str) -> pd.DataFra
 
         parsed_df.loc[idx] = [row["Date"], row["Description"].lower(), amount, row["Memo"]]
 
-    logger.info(
-        f"Extracted {len(parsed_df.index)} entries from YNAB, for account {account}."
-    )
+    logger.info(f"Extracted {len(parsed_df.index)} entries from YNAB, for account {account}.")
     logger.debug(f"YNAB Data:\n{parsed_df.head(5)}")
 
     return parsed_df
@@ -97,13 +92,12 @@ def extract_swedbank_df(swedbank_csv: str, filter_date: str) -> pd.DataFrame:
     saldo = float(swedbank_df["Bokfört saldo"].iloc[0])
     logger.info(f"Swedbank Saldo: {saldo} SEK")
 
-    filtered_swedbank_df = swedbank_df.loc[
-        (swedbank_df["Bokföringsdag"] >= filter_date)
-    ][["Bokföringsdag", "Beskrivning", "Belopp"]]
-    filtered_swedbank_df.columns = ["Date", "Description", "Amount"]
-    filtered_swedbank_df["Description"] = filtered_swedbank_df[
-        "Description"
-    ].str.lower()
+    filtered_swedbank_df = swedbank_df.loc[(swedbank_df["Bokföringsdag"] >= filter_date)][
+        ["Bokföringsdag", "Beskrivning", "Referens", "Belopp"]
+    ]
+    filtered_swedbank_df.columns = ["Date", "Description", "Reference", "Amount"]
+    filtered_swedbank_df["Description"] = filtered_swedbank_df["Description"].str.lower()
+    filtered_swedbank_df["Reference"] = filtered_swedbank_df["Reference"].str.lower()
     filtered_swedbank_df["Amount"] = filtered_swedbank_df["Amount"].astype(float)
 
     logger.info(f"Extracted {len(filtered_swedbank_df.index)} entries from Swedbank")
@@ -136,22 +130,14 @@ def extract_ica_df(ica_csv: str, filter_date: str) -> pd.DataFrame:
     saldo = float(saldo.replace("kr", "").replace(",", ".").replace(" ", ""))
     print(f"ICA Saldo: {saldo} SEK")
 
-    filtered_ica_df = ica_df.loc[(ica_df["Datum"] >= filter_date)][
-        ["Datum", "Text", "Belopp"]
-    ]
+    filtered_ica_df = ica_df.loc[(ica_df["Datum"] >= filter_date)][["Datum", "Text", "Belopp"]]
     filtered_ica_df.columns = ["Date", "Description", "Amount"]
     filtered_ica_df["Description"] = filtered_ica_df["Description"].str.lower()
 
     # This is hacky, and tacky, but it works...
-    filtered_ica_df["Amount"] = filtered_ica_df["Amount"].map(
-        lambda a: a.replace("kr", "")
-    )
-    filtered_ica_df["Amount"] = filtered_ica_df["Amount"].map(
-        lambda a: a.replace(",", ".")
-    )
-    filtered_ica_df["Amount"] = filtered_ica_df["Amount"].map(
-        lambda a: a.replace(" ", "")
-    )
+    filtered_ica_df["Amount"] = filtered_ica_df["Amount"].map(lambda a: a.replace("kr", ""))
+    filtered_ica_df["Amount"] = filtered_ica_df["Amount"].map(lambda a: a.replace(",", "."))
+    filtered_ica_df["Amount"] = filtered_ica_df["Amount"].map(lambda a: a.replace(" ", ""))
     filtered_ica_df["Amount"] = filtered_ica_df["Amount"].astype(float)
 
     print(f"Extracted {len(filtered_ica_df.index)} entries from ICA")
@@ -159,9 +145,7 @@ def extract_ica_df(ica_csv: str, filter_date: str) -> pd.DataFrame:
     return filtered_ica_df
 
 
-def compare_frames(
-    frame_1: pd.DataFrame, frame_2: pd.DataFrame, printing: bool = False
-) -> pd.DataFrame:
+def compare_frames(frame_1: pd.DataFrame, frame_2: pd.DataFrame, printing: bool = False) -> pd.DataFrame:
     """Check whether transactions in frame 1 are also present in frame 2.
 
     Args:
@@ -173,9 +157,10 @@ def compare_frames(
 
     not_found = pd.DataFrame(columns=["Date", "Description", "Amount"])
 
-    for idx_1, transaction_1 in frame_1.iterrows():
-
-        logger.debug(f"Verifying transaction: {transaction_1['Description']} from {transaction_1['Date']} @ {transaction_1['Amount']}")
+    for _, transaction_1 in frame_1.iterrows():
+        logger.debug(
+            f"Verifying transaction: {transaction_1['Description']} from {transaction_1['Date']} @ {transaction_1['Amount']}"
+        )
 
         found = False
         amount_1 = transaction_1["Amount"]
@@ -205,8 +190,10 @@ def compare_frames(
                 continue
 
             # Compare with Description
-            f_ratio = fuzz.partial_ratio(transaction_1['Description'], transaction_2['Description'])
-            logger.debug(f" > {transaction_1['Description']} and {transaction_2['Description']} have Fuzz Ratio: {f_ratio}")
+            f_ratio = fuzz.partial_ratio(transaction_1["Description"], transaction_2["Description"])
+            logger.debug(
+                f" > {transaction_1['Description']} and {transaction_2['Description']} have Fuzz Ratio: {f_ratio}"
+            )
 
             if f_ratio > 65:
                 logger.debug(f" >> Considering the transactions to be similar enough. Dropping!")
@@ -214,17 +201,31 @@ def compare_frames(
                 found = True
                 break
 
-            # Compare with 'memo' field in YNAB
+            # Compare Description in bank statement with Memo field in YNAB
             if "Memo" in transaction_2 and not pd.isna(transaction_2["Memo"]):
-              logger.debug(f" > Unable to find match in Description, trying Memo: {transaction_2['Memo']}")
-              f_ratio = fuzz.partial_ratio(transaction_1['Description'], transaction_2['Memo'])
-              logger.debug(f" > {transaction_1['Description']} and {transaction_2['Memo']} have Fuzz Ratio: {f_ratio}")
+                logger.debug(f" > Unable to find match in Description, trying Memo: {transaction_2['Memo']}")
+                f_ratio = fuzz.partial_ratio(transaction_1["Description"], transaction_2["Memo"])
+                logger.debug(
+                    f" > {transaction_1['Description']} and {transaction_2['Memo']} have Fuzz Ratio: {f_ratio}"
+                )
 
-              if f_ratio > 65:
-                  logger.debug(f" >> Considering the transactions to be similar enough. Dropping!")
-                  frame_2.drop(idx_2, inplace=True)
-                  found = True
-                  break
+                if f_ratio > 65:
+                    logger.debug(f" >> Considering the transactions to be similar enough. Dropping!")
+                    frame_2.drop(idx_2, inplace=True)
+                    found = True
+                    break
+
+            # Compare "Reference" in bank statement with Memo field in YNAB
+            if "Memo" in transaction_2 and not pd.isna(transaction_2["Memo"]):
+                logger.debug(f" > Unable to find match in Description, trying Reference: {transaction_2['Memo']}")
+                f_ratio = fuzz.partial_ratio(transaction_1["Reference"], transaction_2["Memo"])
+                logger.debug(f" > {transaction_1['Reference']} and {transaction_2['Memo']} have Fuzz Ratio: {f_ratio}")
+
+                if f_ratio > 65:
+                    logger.debug(f" >> Considering the transactions to be similar enough. Dropping!")
+                    frame_2.drop(idx_2, inplace=True)
+                    found = True
+                    break
 
         if not found:
             logger.warning(f" > Did not find: {amount_1} | {transaction_1['Description']} @ {transaction_1['Date']}")
@@ -266,25 +267,19 @@ def compare_ynab_to_bank(
 
     if not in_bank_not_ynab.empty:
         logger.warning(
-            "The following transactions were found in the "
-            f"{bank_name} export, but not in YNAB:\n{in_bank_not_ynab}"
+            f"There are {len(in_bank_not_ynab)} transactions found in the " f"{bank_name} export, but not in YNAB."
         )
     else:
-        logger.info(
-            f"There are no transactions in {bank_name} that are not also in YNAB."
-        )
+        logger.info(f"There are no transactions in {bank_name} that are not also in YNAB.")
 
     in_ynab_not_bank = compare_frames(ynab, bank, printing=False)
 
     if not in_ynab_not_bank.empty:
         logger.warning(
-            "The following transactions were found in YNAB, but not"
-            f" in the {bank_name} export:\n{in_ynab_not_bank}"
+            f"There are {len(in_ynab_not_bank)} transactions found in YNAB, but not in the {bank_name} export."
         )
     else:
-        logger.info(
-            f"There are no transactions in YNAB that are not also in {bank_name}."
-        )
+        logger.info(f"There are no transactions in YNAB that are not also in {bank_name}.")
 
     if in_bank_not_ynab.empty and in_ynab_not_bank.empty:
         logger.info(f"{bank_name} has no deviating transactions!")
