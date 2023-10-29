@@ -11,8 +11,8 @@ from thefuzz import fuzz
 def extract_ynab_df(ynab_tsv: str, account: str, filter_date: str) -> pd.DataFrame:
     """Extract the interesting data from the YNAB .tsv.
 
-    Extracts: [Date, Payee, Outflow, Inflow], from the account specified,
-    then converts the data into a DataFrame with Columns [Date, Description, Amount].
+    Extracts: [Date, Payee, Outflow, Inflow, Memo], from the account specified,
+    then converts the data into a DataFrame with Columns [Date, Description, Amount, Memo].
 
     Args:
         ynab_tsv: Path to the .tsv file
@@ -128,11 +128,16 @@ def extract_ica_df(ica_csv: str, filter_date: str) -> pd.DataFrame:
         idx += 1
 
     saldo = float(saldo.replace("kr", "").replace(",", ".").replace(" ", ""))
-    print(f"ICA Saldo: {saldo} SEK")
+    logger.info(f"ICA Saldo: {saldo} SEK")
 
     filtered_ica_df = ica_df.loc[(ica_df["Datum"] >= filter_date)][["Datum", "Text", "Belopp"]]
+
     filtered_ica_df.columns = ["Date", "Description", "Amount"]
     filtered_ica_df["Description"] = filtered_ica_df["Description"].str.lower()
+
+    # The Reference column does not exist, but we use it in the Swedbank export
+    # hence we add it here (empty) for consistency.
+    filtered_ica_df["Reference"] = ""
 
     # This is hacky, and tacky, but it works...
     filtered_ica_df["Amount"] = filtered_ica_df["Amount"].map(lambda a: a.replace("kr", ""))
@@ -140,7 +145,7 @@ def extract_ica_df(ica_csv: str, filter_date: str) -> pd.DataFrame:
     filtered_ica_df["Amount"] = filtered_ica_df["Amount"].map(lambda a: a.replace(" ", ""))
     filtered_ica_df["Amount"] = filtered_ica_df["Amount"].astype(float)
 
-    print(f"Extracted {len(filtered_ica_df.index)} entries from ICA")
+    logger.info(f"Extracted {len(filtered_ica_df.index)} entries from ICA")
 
     return filtered_ica_df
 
@@ -165,8 +170,7 @@ def compare_frames(frame_1: pd.DataFrame, frame_2: pd.DataFrame, printing: bool 
         found = False
         amount_1 = transaction_1["Amount"]
 
-        # Reversed, because for some reason the iteration went backwards
-        matching_amount = frame_2.loc[frame_2["Amount"] == amount_1][::-1]
+        matching_amount = frame_2.loc[frame_2["Amount"] == amount_1]
         logger.debug(f" > Found {len(matching_amount)} rows with amount {amount_1}")
 
         for idx_2, transaction_2 in matching_amount.iterrows():
@@ -262,6 +266,10 @@ def compare_ynab_to_bank(
 
     ynab = extract_ynab_df(ynab_tsv, ynab_account, filter_date)
     bank = extraction_function(bank_file, filter_date)
+
+    # Just ensure both frames are sorted in the same direction
+    ynab.sort_values(by="Date")
+    bank.sort_values(by="Date")
 
     in_bank_not_ynab = compare_frames(bank, ynab, printing=False)
 

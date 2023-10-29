@@ -22,7 +22,7 @@ def main(args):
     # (YNAB Account Name, Path to data file, Name of bank, Function that parses data file into a DataFrame)
     LIST_OF_BANKS = [
         ("Checking", "data/swedbank.csv", "Swedbank", extract_swedbank_df),
-#        ("ICA Banken", "data/ica.csv", "ICA Banken", extract_ica_df),
+        ("ICA Banken", "data/ica.csv", "ICA Banken", extract_ica_df),
     ]
 
     # Query YNAB API for data
@@ -37,7 +37,7 @@ def main(args):
         )
         ynab_tsv = "data/ynab.tsv"
 
-    for (account, bank_file, bank, extraction_function) in LIST_OF_BANKS:
+    for account, bank_file, bank, extraction_function in LIST_OF_BANKS:
         compare_ynab_to_bank(
             ynab_tsv,
             account,
@@ -50,9 +50,7 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--filter-date", required=True, help="Earliest date to take into consideration."
-    )
+    parser.add_argument("--filter-date", required=True, help="Earliest date to take into consideration.")
     parser.add_argument(
         "--budget-name",
         required=True,
