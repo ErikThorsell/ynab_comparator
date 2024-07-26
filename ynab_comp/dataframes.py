@@ -219,17 +219,17 @@ def compare_frames(frame_1: pd.DataFrame, frame_2: pd.DataFrame, printing: bool 
                     found = True
                     break
 
-            # Compare "Reference" in bank statement with Memo field in YNAB
-            if "Memo" in transaction_2 and not pd.isna(transaction_2["Memo"]):
-                logger.debug(f" > Unable to find match in Description, trying Reference: {transaction_2['Memo']}")
-                f_ratio = fuzz.partial_ratio(transaction_1["Reference"], transaction_2["Memo"])
-                logger.debug(f" > {transaction_1['Reference']} and {transaction_2['Memo']} have Fuzz Ratio: {f_ratio}")
+                # Compare "Reference" in bank statement with Memo field in YNAB
+                if not pd.isna(transaction_1['Reference']):
+                    logger.debug(f" > Unable to find match in Description, trying Reference: {transaction_1['Reference']}")
+                    f_ratio = fuzz.partial_ratio(transaction_1["Reference"], transaction_2["Memo"])
+                    logger.debug(f" > {transaction_1['Reference']} and {transaction_2['Memo']} have Fuzz Ratio: {f_ratio}")
 
-                if f_ratio > 65:
-                    logger.debug(f" >> Considering the transactions to be similar enough. Dropping!")
-                    frame_2.drop(idx_2, inplace=True)
-                    found = True
-                    break
+                    if f_ratio > 65:
+                        logger.debug(f" >> Considering the transactions to be similar enough. Dropping!")
+                        frame_2.drop(idx_2, inplace=True)
+                        found = True
+                        break
 
         if not found:
             logger.warning(f" > Did not find: {amount_1} | {transaction_1['Description']} @ {transaction_1['Date']}")
